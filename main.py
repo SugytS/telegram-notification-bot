@@ -14,28 +14,32 @@ if OWNER_ID == 0:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Название группы, которую нужно отслеживать (можно указать точное название)
+TARGET_GROUP_NAME = "InnoAds"   # Если название на русском – пишите как в Telegram
+
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.effective_message:
         return
+
+    chat = update.effective_chat
+
     text = update.effective_message.text or update.effective_message.caption or ""
     if "роутер" in text.lower():
-        chat = update.effective_chat
         user = update.effective_user
         msg = (
-            f"🔍 *Found 'роутер' in:*\n"
-            f"Chat: {chat.title or chat.first_name or 'Private'}\n"
-            f"User: @{user.username or user.full_name}\n"
-            f"Message: {text[:200]}..."
+            f"🔍 *Найдено 'роутер' в группе {chat.title}:*\n"
+            f"От: @{user.username or user.full_name}\n"
+            f"Текст: {text[:200]}..."
         )
         try:
             await context.bot.send_message(chat_id=OWNER_ID, text=msg, parse_mode="Markdown")
         except Exception as e:
-            logger.error(f"Failed to notify owner: {e}")
+            logger.error(f"Не удалось отправить уведомление: {e}")
 
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(MessageHandler(filters.ALL, message_handler))
-    logger.info("Starting bot with long polling...")
+    logger.info("Бот запущен, отслеживаю группу InnoAds...")
     app.run_polling()
 
 if __name__ == "__main__":
