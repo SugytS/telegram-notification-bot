@@ -1,46 +1,59 @@
 import os
+import asyncio
 import logging
-from telegram import Update
-from telegram.ext import Application, MessageHandler, filters, ContextTypes
+from telethon import TelegramClient, events
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-OWNER_ID = int(os.getenv("OWNER_ID", "0"))
+# === Настройки из переменных окружения ===
+API_ID = int(os.getenv("API_ID"))          # из my.telegram.org
+API_HASH = os.getenv("API_HASH")
+BOT_TOKEN = os.getenv("BOT_TOKEN")         # ваш бот-токен (для отправки уведомлений)
+OWNER_ID = int(os.getenv("OWNER_ID"))      # ваш Telegram ID
 
-if not BOT_TOKEN:
-    raise ValueError("BOT_TOKEN not set!")
-if OWNER_ID == 0:
-    logging.warning("OWNER_ID not set, notifications will not work.")
+# Если нет бота – можно отправлять уведомления с самого клиента
+# Но для удобства используем бота для рассылки
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Название группы, которую нужно отслеживать (можно указать точное название)
-TARGET_GROUP_NAME = "InnoAds"   # Если название на русском – пишите как в Telegram
+# Создаём клиент
+client = TelegramClient("session", API_ID, API_HASH)
 
-async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.effective_message:
-        return
+# Функция отправки уведомления через бота
+async def notify_owner(text):
+    from telegram import Bot
+    bot = Bot(token=BOT_TOKEN)
+    await bot.send_message(chat_id=OWNER_ID, text=text, parse_mode="Markdown")
 
-    chat = update.effective_chat
+# Обработчик новых сообщений
+@client.on(events.NewMessage)
+async def handler(event):
+    # Проверяем, что это сообщение из канала (или из группы)
+    # event.chat – может быть каналом, группой, пользователем
+    # Фильтруем только каналы (если нужно только каналы)
+    # if not event.is_channel:
+    #     return
 
-    text = update.effective_message.text or update.effective_message.caption or ""
+    text = event.message.text or event.message.caption or ""
     if "роутер" in text.lower():
-        user = update.effective_user
+        chat = await event.get_chat()
+        user = await event.get_sender()
         msg = (
-            f"🔍 *Найдено 'роутер' в группе {chat.title}:*\n"
-            f"От: @{user.username or user.full_name}\n"
+            f"🔍 *Найдено 'роутер' в:*\n"
+            f"Канал/чат: {chat.title or 'Приват'}\n"
+            f"От: {user.first_name or user.username or 'Неизвестно'}\n"
             f"Текст: {text[:200]}..."
         )
         try:
-            await context.bot.send_message(chat_id=OWNER_ID, text=msg, parse_mode="Markdown")
+            await notify_owner(msg)
         except Exception as e:
             logger.error(f"Не удалось отправить уведомление: {e}")
 
-def main():
-    app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(MessageHandler(filters.ALL, message_handler))
-    logger.info("Бот запущен, отслеживаю группу InnoAds...")
-    app.run_polling()
+async def main():
+    logger.info("Запуск клиента...")
+    await client.start()
+    logger.info("Клиент запущен, слушаем все сообщения из каналов и групп.")
+    # Бесконечный цикл (пока не остановим)
+    await client.run_until_disconnected()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
